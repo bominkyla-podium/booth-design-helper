@@ -93,7 +93,7 @@ if uploaded_file is not None:
                 {raw_text[:35000]}
                 """
                 
-                response = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+                response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                 
                 st.markdown("---")
                 st.subheader("📊 장치공사 규정 분석 결과 대시보드")
