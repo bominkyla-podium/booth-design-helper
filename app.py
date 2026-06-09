@@ -90,11 +90,11 @@ if uploaded_file is not None:
                 | :--- | :--- | :--- | :--- |
                 
                 [원본 규정집 텍스트]:
-                {raw_text[:40000]}
+                {raw_text[:35000]}
                 """
                 
-                # 대용량 처리를 위해 모델을 1.5-flash로 안정화
-                response = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+                # 최신 대용량 안정형 모델인 gemini-3.5-flash 지정
+                response = client.models.generate_content(model='gemini-3.5-flash', contents=prompt)
                 
                 st.markdown("---")
                 st.subheader("📊 장치공사 규정 분석 결과 대시보드")
