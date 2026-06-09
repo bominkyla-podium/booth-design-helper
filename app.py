@@ -26,7 +26,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🎪 전시 부스 시공사용 Regulation 자동 분석기")
-st.caption("규정집 PDF 요약은 물론, 내가 직접 입력한 개별 일정까지 합쳐서 하나의 타임라인으로 정렬해 줍니다.")
+st.caption("여러 개의 규정집 PDF 파일과 내가 직접 입력한 개별 일정까지 모두 융합하여 하나의 타임라인으로 정렬해 줍니다.")
 st.markdown("---")
 
 # 3. API 키 불러오기
@@ -38,59 +38,62 @@ else:
 
 # 4. 사이드바 수동 일정 추가 기능
 st.sidebar.header("➕ 나만의 일정 추가하기")
-st.sidebar.write("규정집 외에 추가하고 싶은 내부 일정을 입력하세요. (엑셀처럼 칸을 더블클릭해 수정하고 행을 추가할 수 있습니다)")
+st.sidebar.write("규정집 외에 추가하고 싶은 내부 일정을 입력하세요.")
 
-# 기본 샘플 틀 데이터 제공
 if "custom_events" not in st.session_state:
     st.session_state.custom_events = pd.DataFrame(
         [{"날짜 (Date)": "2026-08-25", "시간 (Time)": "14:00", "해야 할 일 / 주요 일정 (Task)": "🔥 내부 시공 도면 최종 검수", "비고 및 접수처 (Notice / Where)": "[내부] 회의실"}]
     )
 
-# 데이터 에디터 실행
 edited_df = st.sidebar.data_editor(
     st.session_state.custom_events, 
     num_rows="dynamic", 
     use_container_width=True
 )
 
-st.markdown("### 📄 1. 규정집 파일 업로드")
-uploaded_file = st.file_uploader("전시 규정집 PDF 파일을 업로드하세요", type=["pdf"])
+st.markdown("### 📄 1. 규정집 파일 업로드 (다중 선택 가능)")
+# 💡 accept_multiple_files=True 옵션을 넣어 여러 파일 업로드가 가능하게 변경!
+uploaded_files = st.file_uploader("전시 규정집 PDF 파일들을 모두 업로드하세요 (여러 개 선택 가능)", type=["pdf"], accept_multiple_files=True)
 
-if uploaded_file is not None:
-    with st.spinner("📄 PDF 텍스트를 추출하는 중입니다..."):
-        reader = PdfReader(uploaded_file)
-        raw_text = "".join([page.extract_text() + "\n" for page in reader.pages])
-    st.success("텍스트 추출 완료!")
+if uploaded_files:
+    raw_text = ""
+    with st.spinner("📄 업로드된 모든 PDF에서 텍스트를 추출하는 중입니다..."):
+        # 여러 개의 파일을 하나씩 순서대로 읽어서 합치는 반복문
+        for uploaded_file in uploaded_files:
+            reader = PdfReader(uploaded_file)
+            file_text = "".join([page.extract_text() + "\n" for page in reader.pages])
+            raw_text += f"\n--- [파일명: {uploaded_file.name} 에서 추출된 내용] ---\n" + file_text
+            
+    st.success(f"총 {len(uploaded_files)}개의 파일 텍스트 추출 완료!")
     
-    if st.button("🪄 장치공사 규정 분석 시작하기"):
-        with st.spinner("🤖 내 일정과 규정집을 합쳐서 타임라인을 병합하는 중..."):
+    if st.button("🪄 통합 장치공사 규정 분석 시작하기"):
+        with st.spinner("🤖 모든 파일 내용과 내 일정을 합쳐서 종합 타임라인을 병합하는 중..."):
             try:
                 client = genai.Client(api_key=GEMINI_API_KEY)
                 
-                # 수동 일정 문자열 변환 처리
                 custom_text = ""
                 if not edited_df.empty:
                     custom_text = "\n[PM이 추가한 수동 일정 목록]:\n"
                     for _, row in edited_df.iterrows():
                         custom_text += f"| {row['날짜 (Date)']} | {row['시간 (Time)']} | {row['해야 할 일 / 주요 일정 (Task)']} | {row['비고 및 접수처 (Notice / Where)']} |\n"
 
-                # 에러 유발 가능성이 있는 중괄호 구조를 안전하게 맵핑한 프롬프트
                 prompt = f"""
-                당신은 베테랑 전시 부스 시공사(장치업체)의 PM입니다. 제공된 전시 규정집 텍스트와 하단의 [PM이 추가한 수동 일정 목록]을 완벽히 병합하여 시공용 요약본을 작성해 주세요.
+                당신은 베테랑 전시 부스 시공사(장치업체)의 PM입니다. 제공된 여러 개의 전시 규정집 텍스트들과 하단의 [PM이 추가한 수동 일정 목록]을 '장치공사(시공/철거)' 관점에서 완벽히 병합하여 하나의 종합 요약본을 작성해 주세요.
                 
                 🚨 [장치업체 맞춤형 요약 규칙]:
-                1. '전시 기간(오픈 시간)' 정보는 상세 운영시간을 제외하고 날짜만 심플하게 기재하세요.
-                2. **[철거 및 반출 일정]**을 구체적인 시간 위주로 디테일하게 분석하세요. 전시 종료 당일 진입 가능 시간, 반출 마감 시간 등이 필수 포함되어야 합니다.
+                1. 여러 파일에 적힌 '전시 기간(오픈 시간)' 정보는 중복 없이 날짜만 심플하게 요약 기재하세요. (어느 전시회/파일명 인지 명시)
+                2. 여러 파일에 흩어져 있는 **[철거 및 반출 일정]**을 구체적인 시간 위주로 디테일하게 분석하세요. 전시 종료 당일 진입 가능 시간, 반출 마감 시간 등이 필수 포함되어야 합니다.
                 3. 본문 내용 중에는 HTML 태그를 사용하지 마세요.
-                4. 🚨 **[타임라인 표 병합 및 정렬 규칙]**: 
-                   - 원본 규정집에서 찾아낸 일정들과 제공된 [PM이 추가한 수동 일정 목록]을 **하나의 마크다운 표로 합치세요.**
-                   - 합친 후 모든 행을 **[날짜와 시간 순서대로 완벽하게 정렬]**하여 '6. 🕒 장치공사 핵심 타임라인' 표를 만드세요.
-                   - 접수처는 'Online Exhibitor Service Center' 같은 긴 문구 대신 `[온라인]`, `[온라인 포털]` 혹은 `[이메일: 주소]` 형태로 무조건 짧게 축약하세요. 정보가 없다면 간단히 `[-]`로 채우세요.
+                4. 🚨 **[통합 타임라인 표 병합 및 정렬 규칙]**: 
+                   - 모든 규정집 파일에서 찾아낸 일정들과 제공된 [PM이 추가한 수동 일정 목록]을 **단 하나의 마크다운 표로 통합하세요.**
+                   - 합친 후 모든 행을 전시회 구분 없이 **[날짜와 시간 순서대로 완벽하게 정렬]**하여 '6. 🕒 장치공사 핵심 타임라인' 표를 만드세요.
+                   - 여러 전시회가 섞여 있다면 '해야 할 일 / 주요 일정' 칸에 `[전시회명/파일명]`을 머리말로 적어주어 헷갈리지 않게 하세요.
+                   - 접수처는 무조건 `[온라인]`, `[온라인 포털]` 혹은 `[이메일: 주소]` 형태로 짧게 축약하세요. 정보가 없다면 간단히 `[-]`로 채우세요.
                    - 주요 행정 마감일이나 필수 체크 일정은 해야 할 일 칸에 '🔥' 아이콘과 볼드체(**글씨**)를 적용하세요.
                 
                 [출력 양식]:
                 ### 1. 기본 정보 & 전시 일정 (요약)
-                - 전시 장소: 
+                - 전시 장소 및 전시회 정보: 
                 - 전시 기간: 
                 
                 ### 2. 부스 설치(장치공사) 일정
@@ -112,22 +115,22 @@ if uploaded_file is not None:
                 - 방염 규정 및 위험물 반입 제한: 
                 - 페널티 및 관리비 규정: 
                 
-                ### 6. 🕒 장치공사 핵심 타임라인 (수동 일정 포함 날짜순 정렬)
-                *규정집 일정과 PM 추가 일정이 시간 순서대로 통합된 표입니다. (🔥 표시된 마감일 필수 체크)*
+                ### 6. 🕒 장치공사 핵심 타임라인 (통합 파일 날짜순 정렬)
+                *모든 업로드 파일의 일정과 PM 추가 일정이 시간 순서대로 통합된 마스터 표입니다. (🔥 표시된 마감일 필수 체크)*
                 
                 | 날짜 (Date) | 시간 (Time) | 해야 할 일 / 주요 일정 (Task) | 비고 및 접수처 (Notice / Where) |
                 | :--- | :--- | :--- | :--- |
                 
                 {custom_text}
                 
-                [원본 규정집 텍스트]:
-                {raw_text[:35000]}
+                [원본 규정집 텍스트들]:
+                {raw_text[:40000]}
                 """
                 
                 response = client.models.generate_content(model='gemini-3.5-flash', contents=prompt)
                 
                 st.markdown("---")
-                st.subheader("📊 장치공사 규정 분석 결과 대시보드")
+                st.subheader("📊 통합 장치공사 규정 분석 결과 대시보드")
                 st.markdown(f'<div class="report-box">{response.text}</div>', unsafe_allow_html=True)
                 
             except Exception as e:
