@@ -49,7 +49,7 @@ if uploaded_file is not None:
             try:
                 client = genai.Client(api_key=GEMINI_API_KEY)
                 
-                # 💡 전시 기간 축소 및 철거 일정 디테일 강화를 위한 프롬프트 수정
+                # 💡 장치업체 전용 프롬프트 데이터
                 prompt = f"""
                 당신은 베테랑 전시 부스 시공사(장치업체)의 PM입니다. 제공된 전시 규정집 텍스트를 분석하여 현장 작업팀과 관리자가 즉시 체크할 수 있는 시공 맞춤형 요약본을 작성해 주세요.
                 
@@ -78,7 +78,7 @@ if uploaded_file is not None:
                 - 시공 관리비 및 장치공사 신고 서류: 
                 - 유틸리티(전기/인터넷/급배수 등) 신청: 
                 
-                ### 5. 부스 시공 및 안전/디ain 제한 규정
+                ### 5. 부스 시공 및 안전/디자인 제한 규정
                 - 부스 제한 높이 및 바닥단 규정: 
                 - 방염 규정 및 위험물 반입 제한: 
                 - 페널티 및 관리비 규정: 
@@ -90,10 +90,11 @@ if uploaded_file is not None:
                 | :--- | :--- | :--- | :--- |
                 
                 [원본 규정집 텍스트]:
-                {raw_text[:35000]}
+                {raw_text[:40000]}
                 """
                 
-                response = client.models.generate_content(model='gemini-2.5-pro', contents=prompt)
+                # 대용량 처리를 위해 모델을 1.5-flash로 안정화
+                response = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
                 
                 st.markdown("---")
                 st.subheader("📊 장치공사 규정 분석 결과 대시보드")
